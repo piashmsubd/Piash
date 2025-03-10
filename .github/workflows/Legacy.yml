@@ -1,0 +1,61 @@
+name: Build Halium/LineageOS
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Dependencies
+        run: |
+          sudo apt update && sudo apt upgrade -y
+          sudo apt install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop openjdk-8-jdk openssh-client python2 python3 rsync schedtool squashfs-tools unzip x11proto-core-dev xsltproc zip zlib1g-dev
+          sudo apt install -y repo
+
+      - name: Set up Repo and Sync Sources
+        run: |
+          mkdir -p ~/android/halium
+          cd ~/android/halium
+          repo init -u https://github.com/Halium/android -b halium-10.0 --depth=1
+          repo sync -c -j$(nproc) --force-sync
+
+      - name: Clone Device, Vendor, and Kernel Trees
+        run: |
+          cd ~/android/halium
+          git clone https://github.com/piashmsubd/vendor_nubia_nx669j.git vendor/nubia/nx669j
+          git clone https://github.com/piashmsubd/android_kernel_nubia_sm8350.git kernel/nubia/sm8350
+          git clone https://github.com/DrBrown28/TWRP_NX669J_12.1 -b Twrp_12.1_SM8350 device/nubia/nx669j
+
+      - name: Set up Build Environment
+        run: |
+          cd ~/android/halium
+          source build/envsetup.sh
+          export ALLOW_MISSING_DEPENDENCIES=true
+          lunch lineage_nx669j-userdebug
+
+      - name: Start Build Process
+        run: |
+          cd ~/android/halium
+          mka systemimage
+          mka bootimage
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Halium_Build
+          path: |
+            ~/android/halium/out/target/product/nx669j/system.img
+            ~/android/halium/out/target/product/nx669j/boot.img
